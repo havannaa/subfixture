@@ -1,0 +1,58 @@
+// fblc.js
+const { ApiPromise, WsProvider } = require('@polkadot/api');
+
+async function main() {
+    const blockNumber = parseInt(process.argv[2], 10);
+
+    if (isNaN(blockNumber)) {
+        console.error("❌ Please provide a valid block number");
+        console.error("Usage: node fblc.js <blockNumber>");
+        process.exit(1);
+    }
+
+    // Connect to your node
+    const wsProvider = new WsProvider('wss://7a4102269d7d.ngrok-free.app'); // Change if needed
+    const api = await ApiPromise.create({ provider: wsProvider });
+
+    // Get block hash for this block number
+    const blockHash = await api.rpc.chain.getBlockHash(blockNumber);
+
+    // Get block and events at this block
+    const signedBlock = await api.rpc.chain.getBlock(blockHash);
+    const allRecords = await api.query.system.events.at(blockHash);
+
+    console.log(`\n=== Block #${blockNumber} ===`);
+    console.log(`Hash:        ${blockHash.toHex()}`);
+    console.log(`Parent Hash: ${signedBlock.block.header.parentHash.toHex()}`);
+    console.log(`State Root:  ${signedBlock.block.header.stateRoot.toHex()}`);
+    console.log(`Extrinsics Root: ${signedBlock.block.header.extrinsicsRoot.toHex()}`);
+    console.log(`\n--- Digest Logs ---`);
+    signedBlock.block.header.digest.logs.forEach((log, i) => {
+        console.log(`Log[${i}]:`, log.toHuman());
+    });
+
+    console.log(`\n--- Extrinsics ---`);
+    signedBlock.block.extrinsics.forEach((ex, index) => {
+        const { method, signer, args, tip } = ex;
+        console.log(`Extrinsic[${index}] ${method.section}.${method.method}`);
+        if (signer && signer.toString() !== 'undefined') {
+            console.log(`  Signer: ${signer.toString()}`);
+        }
+        if (tip && tip.toNumber() > 0) {
+            console.log(`  Tip: ${tip.toString()}`);
+        }
+        console.log(`  Args: ${args.map(a => a.toString()).join(', ')}`);
+    });
+
+    console.log(`\n--- Events ---`);
+    allRecords.forEach(({ event, phase }, index) => {
+        console.log(`Event[${index}]: ${event.section}.${event.method}`);
+        console.log(`  Phase: ${phase.toString()}`);
+        console.log(`  Data: ${event.data.map(d => d.toString()).join(', ')}`);
+    });
+
+    await api.disconnect();
+}
+
+main().catch(console.error);
+
